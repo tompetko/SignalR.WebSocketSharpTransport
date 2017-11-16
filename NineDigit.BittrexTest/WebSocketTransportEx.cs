@@ -20,8 +20,6 @@ namespace NineDigit.BittrexTest
         private readonly IHttpClient _httpClient;
         private IConnection _connection;
 
-        //public string UserAgent { get; set; }
-
         public DefaultHttpClientWrapper()
         {
             _httpClient = new DefaultHttpClient();
@@ -390,19 +388,6 @@ namespace NineDigit.BittrexTest
                 this.SetCookie(cookie);
             }
         }
-
-        /*private void SetHeader(string key, string value)
-        {
-            for (int i = _headers.Count - 1; i >= 0; i--)
-            {
-                var header = _headers[i];
-
-                if (header.Key == key)
-                    _headers.RemoveAt(i);
-            }
-
-            _headers.Add(new KeyValuePair<string, string>(key, value));
-        }*/
     }
 
     public class WebSocketTransportEx : ClientTransportBase

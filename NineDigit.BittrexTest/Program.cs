@@ -96,16 +96,14 @@ namespace NineDigit.BittrexTest
                         new LongPollingTransport(httpClient)
                     };
 
-                    autoTransport = new AutoTransport(
-                        httpClient, transports);
-
-                    _connection.Headers.Add("User-Agent", configuration.CloudFlare.UserAgent);
+                    autoTransport = new AutoTransport(httpClient, transports);
 
                     foreach (var cookie in configuration.CloudFlare.Cookies)
                     {
                         _connection.CookieContainer.Add(_feedUri, new Cookie(cookie.Name, cookie.Value));
                     }
-                    
+
+                    _connection.Headers.Add("User-Agent", configuration.CloudFlare.UserAgent);
                     _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
 
