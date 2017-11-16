@@ -2,37 +2,20 @@
 using Microsoft.AspNet.SignalR.Client.Http;
 using Microsoft.AspNet.SignalR.Client.Infrastructure;
 using Microsoft.AspNet.SignalR.Client.Transports;
+using Microsoft.AspNet.SignalR.WebSockets;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.WebSockets;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Diagnostics;
+using WebSocketSharp;
 
 namespace NineDigit.BittrexTest
 {
-    internal static class TaskCompletionSourceExtensions
-    {
-        public static void SetUnwrappedException<T>(this TaskCompletionSource<T> self, Exception ex)
-        {
-            self.SetException(ex.Unwrap());
-        }
-    }
-
-    internal static class TaskAsyncHelper
-    {
-        internal static Task FromError(Exception e)
-        {
-            return FromError<object>(e);
-        }
-
-        internal static Task<T> FromError<T>(Exception e)
-        {
-            var tcs = new TaskCompletionSource<T>();
-            tcs.SetUnwrappedException<T>(e);
-            return tcs.Task;
-        }
-    }
-
     internal static class ExceptionsExtensions
     {
         internal static Exception Unwrap(this Exception ex)
@@ -43,6 +26,7 @@ namespace NineDigit.BittrexTest
             }
 
             var next = ex.GetBaseException();
+
             while (next.InnerException != null)
             {
                 // On mono GetBaseException() doesn't seem to do anything
@@ -87,30 +71,271 @@ namespace NineDigit.BittrexTest
         }
     }
 
-    public class WebSocketTransport2 : ClientTransportBase
+    internal static class TaskAsyncHelper
     {
-        private readonly ClientWebSocketHandler2 _webSocketHandler;
+        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode", Justification = "This is a shared file")]
+        internal static void SetUnwrappedException<T>(this TaskCompletionSource<T> tcs, Exception e)
+        {
+            var aggregateException = e as AggregateException;
+            if (aggregateException != null)
+            {
+                tcs.SetException(aggregateException.InnerExceptions);
+            }
+            else
+            {
+                tcs.SetException(e);
+            }
+        }
+
+        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode", Justification = "This is a shared file")]
+        internal static Task FromError(Exception e)
+        {
+            return FromError<object>(e);
+        }
+
+        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode", Justification = "This is a shared file")]
+        internal static Task<T> FromError<T>(Exception e)
+        {
+            var tcs = new TaskCompletionSource<T>();
+            tcs.SetUnwrappedException<T>(e);
+            return tcs.Task;
+        }
+    }
+
+    internal static class ErrorEventArgsExtensions
+    {
+        public static Exception ToException(this ErrorEventArgs args)
+        {
+            return args.Exception ?? new Exception(args.Message);
+        }
+    }
+
+    internal class ClientWebSocketHandler : WebSocketHandler
+    {
+        private readonly WebSocketTransportEx _webSocketTransport;
+
+        public ClientWebSocketHandler(WebSocketTransportEx webSocketTransport)
+            : base(maxIncomingMessageSize: null)
+        {
+            Debug.Assert(webSocketTransport != null, "webSocketTransport is null");
+
+            _webSocketTransport = webSocketTransport;
+        }
+
+        internal ClientWebSocketHandler()
+            : base(maxIncomingMessageSize: null)
+        {
+        }
+
+        public override void OnMessage(string message)
+        {
+            _webSocketTransport.OnMessage(message);
+        }
+
+        public override void OnOpen()
+        {
+            _webSocketTransport.OnOpen();
+        }
+
+        public override void OnClose()
+        {
+            _webSocketTransport.OnClose();
+        }
+
+        public override void OnError()
+        {
+            _webSocketTransport.OnError(Error);
+        }
+    }
+
+    internal class WebSocketWrapperRequestEx : IRequest
+    {
+        const string UserAgentHeaderKey = "User-Agent";
+
+        private readonly List<KeyValuePair<string, string>> _headers;
+        private readonly WebSocket _clientWebSocket;
+        private readonly IConnection _connection;
+
+        //private CookieContainer _cookieContainer;
+
+        public WebSocketWrapperRequestEx(WebSocket clientWebSocket, IConnection connection)
+        {
+            _clientWebSocket = clientWebSocket;
+            _connection = connection;
+
+            _headers = new List<KeyValuePair<string, string>>();
+
+            if (clientWebSocket.CustomHeaders != null)
+                _headers.AddRange(clientWebSocket.CustomHeaders);
+
+            _clientWebSocket.CustomHeaders = _headers;
+            PrepareRequest();
+        }
+
+        public string UserAgent
+        {
+            get { return this.GetHeader(UserAgentHeaderKey); }
+            set { this.SetHeader(UserAgentHeaderKey, value); }
+        }
+
+        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
+        public ICredentials Credentials
+        {
+            get
+            {
+                return null;
+            }
+            set
+            {
+            }
+        }
+
+        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
+        public CookieContainer CookieContainer
+        {
+            get
+            {
+                return null;
+            }
+            set
+            {
+            }
+        }
+
+        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
+        public IWebProxy Proxy
+        {
+            get
+            {
+                return null;
+            }
+            set
+            {
+            }
+        }
+
+        public string Accept
+        {
+            get
+            {
+                return null;
+            }
+            set
+            {
+
+            }
+        }
+
+        public void SetRequestHeaders(IDictionary<string, string> headers)
+        {
+            if (headers == null)
+            {
+                throw new ArgumentNullException(nameof(headers));
+            }
+
+            foreach (KeyValuePair<string, string> headerEntry in headers)
+            {
+                this.SetHeader(headerEntry.Key, headerEntry.Value);
+            }
+        }
+
+        public void AddClientCerts(X509CertificateCollection certificates)
+        {
+            if (certificates == null)
+            {
+                throw new ArgumentNullException(nameof(certificates));
+            }
+
+            _clientWebSocket.SslConfiguration.ClientCertificates = certificates;
+        }
+
+        public void Abort()
+        {
+        }
+
+        /// <summary>
+        /// Adds certificates, credentials, proxies and cookies to the request
+        /// </summary>
+        private void PrepareRequest()
+        {
+            if (_connection.Certificates != null)
+            {
+                AddClientCerts(_connection.Certificates);
+            }
+
+            if (_connection.CookieContainer != null)
+            {
+                //CookieContainer = _connection.CookieContainer;
+                AddCookies(_connection.CookieContainer, _connection.Url);
+            }
+
+            if (_connection.Credentials != null)
+            {
+                Credentials = _connection.Credentials;
+            }
+
+            if (_connection.Proxy != null)
+            {
+                Proxy = _connection.Proxy;
+            }
+        }
+
+        private void AddCookies(CookieContainer cookieContainer, string url)
+        {
+            if (cookieContainer == null)
+            {
+                throw new ArgumentNullException(nameof(cookieContainer));
+            }
+
+            var uri = new Uri(url);
+            var cookies = cookieContainer.GetCookies(uri);
+
+            foreach (Cookie cookie in cookies)
+            {
+                _clientWebSocket.SetCookie(
+                    new WebSocketSharp.Net.Cookie(cookie.Name, cookie.Value, cookie.Path, cookie.Domain));
+            }
+        }
+
+        private string GetHeader(string key)
+        {
+            return this._headers.FirstOrDefault(i => i.Key == key).Value;
+        }
+
+        private void SetHeader(string key, string value)
+        {
+            for (int i = _headers.Count - 1; i >= 0; i--)
+            {
+                var header = _headers[i];
+
+                if (header.Key == key)
+                    _headers.RemoveAt(i);
+            }
+
+            _headers.Add(new KeyValuePair<string, string>(key, value));
+        }
+    }
+
+    public class WebSocketTransportEx : ClientTransportBase
+    {
+        private CancellationTokenSource _webSocketTokenSource;
         private CancellationToken _disconnectToken;
         private IConnection _connection;
         private string _connectionData;
-        private CancellationTokenSource _webSocketTokenSource;
-        private ClientWebSocket2 _webSocket;
+        private WebSocket _webSocket;
         private int _disposed;
 
-        public WebSocketTransport2()
+        public WebSocketTransportEx()
             : this(new DefaultHttpClient())
         {
         }
 
-        public WebSocketTransport2(IHttpClient client)
+        public WebSocketTransportEx(IHttpClient client)
             : base(client, "webSockets")
         {
             _disconnectToken = CancellationToken.None;
             ReconnectDelay = TimeSpan.FromSeconds(2);
-            _webSocketHandler = new ClientWebSocketHandler2(this);
         }
-
-        // intended for testing
 
         /// <summary>
         /// The time to wait after a connection drops to try reconnecting.
@@ -147,28 +372,87 @@ namespace NineDigit.BittrexTest
         }
 
         // For testing
-        public virtual Task PerformConnect()
+        public virtual async Task PerformConnect()
         {
-            return PerformConnect(UrlBuilder.BuildConnect(_connection, Name, _connectionData));
+            await PerformConnect(UrlBuilder.BuildConnect(_connection, Name, _connectionData));
         }
 
-        private async Task PerformConnect(string url)
+        private Task PerformConnect(string url)
         {
             var uri = UrlBuilder.ConvertToWebSocketUri(url);
+            var wsUrl = uri.OriginalString;
 
             _connection.Trace(TraceLevels.Events, "WS Connecting to: {0}", uri);
 
             // TODO: Revisit thread safety of this assignment
             _webSocketTokenSource = new CancellationTokenSource();
-            _webSocket = new ClientWebSocket2();
 
-            _connection.PrepareRequest(new WebSocketWrapperRequestEx(_webSocket, _connection));
+            _webSocket = new WebSocket(wsUrl, new string[0]);
 
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_webSocketTokenSource.Token, _disconnectToken);
-            CancellationToken token = linkedCts.Token;
+            _webSocket.OnMessage += _webSocket_OnMessage;
+            _webSocket.OnOpen += _webSocket_OnOpen;
+            _webSocket.OnClose += _webSocket_OnClose;
+            _webSocket.OnError += _webSocket_OnError;
 
-            await _webSocket.ConnectAsync(uri, token);
-            await _webSocketHandler.ProcessWebSocketRequestAsync(_webSocket, token);
+            _connection.PrepareRequest(
+                new WebSocketWrapperRequestEx(_webSocket, _connection));
+
+            //CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_webSocketTokenSource.Token, _disconnectToken);
+            //CancellationToken token = linkedCts.Token;
+
+            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
+            EventHandler<ErrorEventArgs> onError = null;
+            EventHandler onOpen = null;
+
+            onError = (o, e) =>
+            {
+                _webSocket.OnError -= onError;
+                _webSocket.OnOpen -= onOpen;
+                
+                tcs.SetException(e.ToException());
+            };
+            
+            onOpen = (o, e) =>
+            {
+                _webSocket.OnOpen -= onOpen;
+                _webSocket.OnError -= onError;
+
+                tcs.SetResult(null);
+            };
+
+            _webSocket.OnError += onError;
+            _webSocket.OnOpen += onOpen;
+
+            _webSocket.ConnectAsync();
+
+            return tcs.Task;
+        }
+
+        private void _webSocket_OnError(object sender, ErrorEventArgs e)
+        {
+            this.OnError(e.ToException());
+        }
+
+        private void _webSocket_OnClose(object sender, CloseEventArgs e)
+        {
+            this.OnClose();
+        }
+
+        private void _webSocket_OnOpen(object sender, EventArgs e)
+        {
+            this.OnOpen();
+        }
+
+        private void _webSocket_OnMessage(object sender, MessageEventArgs e)
+        {
+            if (e.IsText)
+            {
+                this.OnMessage(e.Data);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         protected override void OnStartFailed()
@@ -181,19 +465,25 @@ namespace NineDigit.BittrexTest
         {
             if (connection == null)
             {
-                throw new ArgumentNullException("connection");
+                throw new ArgumentNullException(nameof(connection));
             }
 
             // If we don't throw here when the WebSocket isn't open, WebSocketHander.SendAsync will noop.
-            if (_webSocketHandler.GetWebSocket().State != WebSocketState.Open)
+            if (_webSocket.ReadyState != WebSocketState.Open)
             {
                 // Make this a faulted task and trigger the OnError even to maintain consistency with the HttpBasedTransports
-                var ex = new InvalidOperationException("Resources.Error_DataCannotBeSentDuringWebSocketReconnect");
+                var ex = new InvalidOperationException("Error_DataCannotBeSentDuringWebSocketReconnect");
+                var result = TaskAsyncHelper.FromError(ex);
+
                 connection.OnError(ex);
-                return TaskAsyncHelper.FromError(ex);
+                return result;
             }
 
-            return _webSocketHandler.Send(data);
+            // TODO: Subscribe error
+
+            _webSocket.Send(data);
+
+            return Task.Delay(0);
         }
 
         // virtual for testing
@@ -271,7 +561,7 @@ namespace NineDigit.BittrexTest
         public override void LostConnection(IConnection connection)
         {
             _connection.Trace(TraceLevels.Events, "WS: LostConnection");
-
+            
             if (_webSocketTokenSource != null)
             {
                 _webSocketTokenSource.Cancel();
@@ -296,7 +586,7 @@ namespace NineDigit.BittrexTest
 
                 if (_webSocket != null)
                 {
-                    _webSocket.Dispose();
+                    //_webSocket.Dispose();
                 }
 
                 if (_webSocketTokenSource != null)
@@ -308,112 +598,4 @@ namespace NineDigit.BittrexTest
             base.Dispose(disposing);
         }
     }
-
-    /*public class WebSocketTransportEx : WebSocketTransport
-    {
-        private readonly ClientWebSocketHandlerEx _webSocketHandler;
-        private CancellationToken _disconnectToken;
-        private IConnection _connection;
-        private string _connectionData;
-
-        private readonly FieldInfo __webSocketTokenSourceFieldInfo;
-        //private readonly FieldInfo __disconnectTokenFieldInfo;
-        private readonly FieldInfo __webSocketFieldInfo;
-
-        private readonly MethodInfo _OnMessageMethodInfo;
-        private readonly MethodInfo _OnOpenMethodInfo;
-        private readonly MethodInfo _OnCloseMethodInfo;
-        private readonly MethodInfo _OnErrorMethodInfo;
-
-        public WebSocketTransportEx()
-            : this(new DefaultHttpClient())
-        {
-        }
-
-        public WebSocketTransportEx(IHttpClient client)
-            : base(client)
-        {
-            _webSocketHandler = new ClientWebSocketHandlerEx(this);
-
-            var baseType = this.GetType().BaseType;
-
-            __webSocketFieldInfo = baseType
-                .GetField("_webSocket", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            __webSocketTokenSourceFieldInfo = baseType
-                .GetField("_webSocketTokenSource", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            //__disconnectTokenFieldInfo = thisType
-            //    .GetField("_disconnectToken", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            _OnMessageMethodInfo = baseType
-                .GetMethod("OnMessage", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            _OnOpenMethodInfo = baseType
-                .GetMethod("OnOpen", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            _OnCloseMethodInfo = baseType
-                .GetMethod("OnClose", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            _OnErrorMethodInfo = baseType
-                .GetMethod("OnError", BindingFlags.NonPublic | BindingFlags.Instance);
-        }
-
-        protected override void OnStart(IConnection connection, string connectionData, CancellationToken disconnectToken)
-        {
-            _connection = connection;
-            _connectionData = connectionData;
-            _disconnectToken = disconnectToken;
-
-            base.OnStart(connection, connectionData, disconnectToken);
-        }
-
-        public override Task PerformConnect()
-        {
-            return PerformConnect(UrlBuilder.BuildConnect(_connection, Name, _connectionData));
-        }
-
-        private async Task PerformConnect(string url)
-        {
-            var uri = UrlBuilder.ConvertToWebSocketUri(url);
-
-            _connection.Trace(TraceLevels.Events, "WS Connecting to: {0}", uri);
-
-            // TODO: Revisit thread safety of this assignment
-            CancellationTokenSource wsTokenSource = new CancellationTokenSource();
-            ClientWebSocket2 ws = new ClientWebSocket2();
-
-            // TODO: Set via reflection
-            __webSocketTokenSourceFieldInfo.SetValue(this, wsTokenSource);
-            __webSocketFieldInfo.SetValue(this, ws);
-
-            _connection.PrepareRequest(new WebSocketWrapperRequestEx(ws, _connection));
-
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(wsTokenSource.Token, _disconnectToken);
-            CancellationToken token = linkedCts.Token;
-
-            await ws.ConnectAsync(uri, token);
-            await _webSocketHandler.ProcessWebSocketRequestAsync(ws, token);
-        }
-
-        internal void OnMessage(string message)
-        {
-            _OnMessageMethodInfo.Invoke(this, new object[] { message });
-        }
-
-        internal void OnOpen()
-        {
-            _OnOpenMethodInfo.Invoke(this, null);
-        }
-
-        internal void OnClose()
-        {
-            _OnCloseMethodInfo.Invoke(this, null);
-        }
-
-        internal void OnError(Exception error)
-        {
-            _OnErrorMethodInfo.Invoke(this, new object[] { error });
-        }
-    }*/
 }

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Net;
 using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Http;
+using Microsoft.AspNet.SignalR.Client.Transports;
 
 namespace NineDigit.BittrexTest
 {
@@ -61,7 +62,20 @@ namespace NineDigit.BittrexTest
 
                 try
                 {
-                    await Connection.Start(new WebSocketTransport2(new DefaultHttpClientEx(target, Connection.CookieContainer)));
+                    var httpClient = new DefaultHttpClient();
+                    var transports = new IClientTransport[]
+                    {
+                        new WebSocketTransportEx(httpClient),
+                        new LongPollingTransport(httpClient)
+                    };
+
+                    var autoTransport = new AutoTransport(
+                        httpClient, transports);
+
+                    this.Connection.TransportConnectTimeout = new TimeSpan(0, 0, 15);
+
+                    await Connection.Start(autoTransport);
+                    //await Connection.Start();
                 }
                 catch (HttpRequestException)
                 {
@@ -72,6 +86,8 @@ namespace NineDigit.BittrexTest
             {
                 Console.WriteLine("Got no clearance from Cloudaflare", "cloudflare.log");
             }
+
+            //signal.WaitOne();
         }
 
         private void OnUpdateOrderState(dynamic obj)
@@ -162,104 +178,6 @@ namespace NineDigit.BittrexTest
         }
     }
 
-    class DefaultHttpClientEx : IHttpClient
-    {
-        const string userAgent = "SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)";
-
-        readonly CookieContainer _cookieContainer;
-        readonly DefaultHttpClient _client;
-        readonly Uri _uri;
-        
-        public DefaultHttpClientEx(Uri uri, CookieContainer cookieContainer)
-        {
-            if (uri == null)
-                throw new ArgumentNullException(nameof(uri));
-
-            if (cookieContainer == null)
-                throw new ArgumentNullException(nameof(cookieContainer));
-
-            this._uri = uri;
-            this._cookieContainer = cookieContainer;
-            this._client = new DefaultHttpClient();
-        }
-
-        public async Task<IResponse> Get(string url, Action<IRequest> prepareRequest, bool isLongRunning)
-        {
-            Console.WriteLine($"GET: {url}");
-
-            Action<IRequest> prepareRequestEx = (r) =>
-            {
-                prepareRequest(r);
-
-                var headers = new Dictionary<string, string>();
-                var cookies = this._cookieContainer.GetCookies(this._uri);
-
-                var clearanceCookieValue = cookies.GetCFClearanceCookieValue();
-                var idCookieValue = cookies.GetCFIdCookieValue();
-
-                headers.Add("Cookie", $"__cfduid={idCookieValue}; cf_clearance={clearanceCookieValue}");
-
-                r.SetRequestHeaders(headers);
-
-                var requestType = r.GetType();
-
-                var field = requestType.GetField("_httpRequestMessage",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                var httpRequestMessage = (HttpRequestMessage)field.GetValue(r);
-
-                httpRequestMessage.Headers.Host = "socket.bittrex.com";
-                
-                httpRequestMessage.Headers.UserAgent.Clear();
-                httpRequestMessage.Headers.UserAgent.ParseAdd(userAgent);
-            };
-
-            var result = await this._client.Get(url, prepareRequestEx, isLongRunning);
-
-            return result;
-        }
-
-        public void Initialize(IConnection connection)
-        {
-            this._client.Initialize(connection);
-        }
-
-        public async Task<IResponse> Post(string url, Action<IRequest> prepareRequest, IDictionary<string, string> postData, bool isLongRunning)
-        {
-            Console.WriteLine($"POST: {url}");
-
-            Action<IRequest> prepareRequestEx = (r) =>
-            {
-                prepareRequest(r);
-
-                var headers = new Dictionary<string, string>();
-                var cookies = this._cookieContainer.GetCookies(this._uri);
-
-                var clearanceCookieValue = cookies.GetCFClearanceCookieValue();
-                var idCookieValue = cookies.GetCFIdCookieValue();
-
-                headers.Add("Cookie", $"__cfduid={idCookieValue}; cf_clearance={clearanceCookieValue}");
-
-                r.SetRequestHeaders(headers);
-
-                var requestType = r.GetType();
-
-                var field = requestType.GetField("_httpRequestMessage",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                var httpRequestMessage = (HttpRequestMessage)field.GetValue(r);
-
-                httpRequestMessage.Headers.UserAgent.Clear();
-                httpRequestMessage.Headers.UserAgent.ParseAdd(userAgent);
-            };
-
-            var result = await this._client.Post(url, prepareRequestEx, postData, isLongRunning);
-
-            return result;
-        }
-    }
-
-
     internal class ClearanceHandlerEx : ClearanceHandler
     {
         private const string IdCookieName = "__cfduid";
@@ -274,6 +192,7 @@ namespace NineDigit.BittrexTest
         {
             request.Headers.UserAgent.Clear();
             request.Headers.UserAgent.ParseAdd("SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)");
+            //request.Headers.UserAgent.ParseAdd("websocket-sharp/1.0");
 
             var result = await base.SendAsync(request, cancellationToken);
             
@@ -289,12 +208,13 @@ namespace NineDigit.BittrexTest
         static void Main(string[] args)
         {
             const string userAgent = "SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)";
+            //const string userAgent = "websocket-sharp/1.0";
 
             var bittrexUri = new Uri("https://bittrex.com");
             var bittrexFeedUri = new Uri("https://socket.bittrex.com");
 
             var cookieContainer = new CookieContainer();
-            var handler = new ClearanceHandlerExx(new HttpClientHandler()
+            var handler = new ClearanceHandler(new HttpClientHandler()
             {
                 UseCookies = true,
                 CookieContainer = cookieContainer
