@@ -148,7 +148,33 @@ namespace NineDigit.BittrexTest
         }
     }
 
-    internal class WebSocketWrapperRequestEx : IRequest
+    internal static class CookieExtensions
+    {
+        public static WebSocketSharp.Net.Cookie ToWebSocketSharpCookie(this Cookie cookie)
+        {
+            var wssCookie = new WebSocketSharp.Net.Cookie(
+                cookie.Name, cookie.Value, cookie.Path, cookie.Domain)
+            {
+                Comment = cookie.Comment,
+                CommentUri = cookie.CommentUri,
+                Discard = cookie.Discard,
+                Domain = cookie.Domain,
+                Expired = cookie.Expired,
+                Expires = cookie.Expires,
+                HttpOnly = cookie.HttpOnly,
+                Name = cookie.Name,
+                Path = cookie.Path,
+                Port = cookie.Port,
+                Secure = cookie.Secure,
+                Value = cookie.Value,
+                Version = cookie.Version
+            };
+
+            return wssCookie;
+        }
+    }
+
+    internal class WebSocketSharpRequestWrapperEx : IRequest
     {
         const string UserAgentHeaderKey = "User-Agent";
 
@@ -156,10 +182,14 @@ namespace NineDigit.BittrexTest
         private readonly WebSocket _clientWebSocket;
         private readonly IConnection _connection;
 
-        //private CookieContainer _cookieContainer;
-
-        public WebSocketWrapperRequestEx(WebSocket clientWebSocket, IConnection connection)
+        public WebSocketSharpRequestWrapperEx(WebSocket clientWebSocket, IConnection connection)
         {
+            if (clientWebSocket == null)
+                throw new ArgumentNullException(nameof(clientWebSocket));
+
+            if (connection == null)
+                throw new ArgumentNullException(nameof(connection));
+
             _clientWebSocket = clientWebSocket;
             _connection = connection;
 
@@ -178,7 +208,6 @@ namespace NineDigit.BittrexTest
             set { this.SetHeader(UserAgentHeaderKey, value); }
         }
 
-        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
         public ICredentials Credentials
         {
             get
@@ -187,10 +216,10 @@ namespace NineDigit.BittrexTest
             }
             set
             {
+                throw new NotImplementedException();
             }
         }
 
-        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
         public CookieContainer CookieContainer
         {
             get
@@ -199,10 +228,26 @@ namespace NineDigit.BittrexTest
             }
             set
             {
+                
+                throw new NotImplementedException();
             }
         }
 
-        [SuppressMessage("Microsoft.Performance", "CA1811:No upstream or protected callers", Justification = "Keeping the get accessors for future use")]
+        public void SetCookie(Cookie cookie)
+        {
+            if (cookie == null)
+                throw new ArgumentNullException(nameof(cookie));
+
+            var wssCookie = cookie.ToWebSocketSharpCookie();
+
+            this._clientWebSocket.SetCookie(wssCookie);
+        }
+
+        public void SetCredentials(string userName, string password, bool preAuth)
+        {
+            this._clientWebSocket.SetCredentials(userName, password, preAuth);
+        }
+
         public IWebProxy Proxy
         {
             get
@@ -292,8 +337,7 @@ namespace NineDigit.BittrexTest
 
             foreach (Cookie cookie in cookies)
             {
-                _clientWebSocket.SetCookie(
-                    new WebSocketSharp.Net.Cookie(cookie.Name, cookie.Value, cookie.Path, cookie.Domain));
+                this.SetCookie(cookie);
             }
         }
 
@@ -318,7 +362,6 @@ namespace NineDigit.BittrexTest
 
     public class WebSocketTransportEx : ClientTransportBase
     {
-        private CancellationTokenSource _webSocketTokenSource;
         private CancellationToken _disconnectToken;
         private IConnection _connection;
         private string _connectionData;
@@ -384,9 +427,6 @@ namespace NineDigit.BittrexTest
 
             _connection.Trace(TraceLevels.Events, "WS Connecting to: {0}", uri);
 
-            // TODO: Revisit thread safety of this assignment
-            _webSocketTokenSource = new CancellationTokenSource();
-
             _webSocket = new WebSocket(wsUrl, new string[0]);
 
             _webSocket.OnMessage += _webSocket_OnMessage;
@@ -395,7 +435,7 @@ namespace NineDigit.BittrexTest
             _webSocket.OnError += _webSocket_OnError;
 
             _connection.PrepareRequest(
-                new WebSocketWrapperRequestEx(_webSocket, _connection));
+                new WebSocketSharpRequestWrapperEx(_webSocket, _connection));
 
             //CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_webSocketTokenSource.Token, _disconnectToken);
             //CancellationToken token = linkedCts.Token;
