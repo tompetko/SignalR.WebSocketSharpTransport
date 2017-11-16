@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Net;
 using Microsoft.AspNet.SignalR.Client;
-using Microsoft.AspNet.SignalR.Client.Http;
 using Microsoft.AspNet.SignalR.Client.Transports;
 using System.Threading;
 using System.Collections.ObjectModel;
@@ -112,8 +111,8 @@ namespace NineDigit.BittrexTest
 
                 if (!string.IsNullOrEmpty(configuration.AccessToken))
                 {
-                    var aspNetApplicationCookie = new Cookie(BittrexConstants.__cfduidCookieName, configuration.AccessToken, "/", ".bittrex.com");
-                    _connection.CookieContainer.Add(aspNetApplicationCookie);
+                    var aspNetApplicationCookie = new Cookie(BittrexConstants.accessTokenCookieName, configuration.AccessToken, "/", ".bittrex.com");
+                    _connection.CookieContainer.Add(_feedUri, aspNetApplicationCookie);
                 }
             }
 
