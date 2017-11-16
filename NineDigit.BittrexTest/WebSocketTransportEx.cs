@@ -148,7 +148,7 @@ namespace NineDigit.BittrexTest
         }
     }
 
-    internal static class CookieExtensions
+    internal static class NetCookieExtensions
     {
         public static WebSocketSharp.Net.Cookie ToWebSocketSharpCookie(this Cookie cookie)
         {
@@ -362,7 +362,9 @@ namespace NineDigit.BittrexTest
 
     public class WebSocketTransportEx : ClientTransportBase
     {
+        private CancellationTokenSource _webSocketTokenSource;
         private CancellationToken _disconnectToken;
+
         private IConnection _connection;
         private string _connectionData;
         private WebSocket _webSocket;
@@ -376,7 +378,6 @@ namespace NineDigit.BittrexTest
         public WebSocketTransportEx(IHttpClient client)
             : base(client, "webSockets")
         {
-            _disconnectToken = CancellationToken.None;
             ReconnectDelay = TimeSpan.FromSeconds(2);
         }
 
@@ -395,9 +396,9 @@ namespace NineDigit.BittrexTest
 
         protected override void OnStart(IConnection connection, string connectionData, CancellationToken disconnectToken)
         {
-            _disconnectToken = disconnectToken;
             _connection = connection;
             _connectionData = connectionData;
+            _disconnectToken = disconnectToken;
 
             // We don't need to await this task
             PerformConnect().ContinueWith(task =>
@@ -414,7 +415,6 @@ namespace NineDigit.BittrexTest
             TaskContinuationOptions.NotOnRanToCompletion);
         }
 
-        // For testing
         public virtual async Task PerformConnect()
         {
             await PerformConnect(UrlBuilder.BuildConnect(_connection, Name, _connectionData));
@@ -422,13 +422,19 @@ namespace NineDigit.BittrexTest
 
         private Task PerformConnect(string url)
         {
+            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
+            EventHandler<ErrorEventArgs> onError = null;
+            EventHandler onOpen = null;
+
+            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_webSocketTokenSource.Token, _disconnectToken);
+            CancellationToken token = linkedCts.Token;
+
             var uri = UrlBuilder.ConvertToWebSocketUri(url);
             var wsUrl = uri.OriginalString;
 
             _connection.Trace(TraceLevels.Events, "WS Connecting to: {0}", uri);
 
             _webSocket = new WebSocket(wsUrl, new string[0]);
-
             _webSocket.OnMessage += _webSocket_OnMessage;
             _webSocket.OnOpen += _webSocket_OnOpen;
             _webSocket.OnClose += _webSocket_OnClose;
@@ -437,12 +443,7 @@ namespace NineDigit.BittrexTest
             _connection.PrepareRequest(
                 new WebSocketSharpRequestWrapperEx(_webSocket, _connection));
 
-            //CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_webSocketTokenSource.Token, _disconnectToken);
-            //CancellationToken token = linkedCts.Token;
-
-            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
-            EventHandler<ErrorEventArgs> onError = null;
-            EventHandler onOpen = null;
+            token.Register(() => tcs.TrySetCanceled());
 
             onError = (o, e) =>
             {
@@ -508,22 +509,43 @@ namespace NineDigit.BittrexTest
                 throw new ArgumentNullException(nameof(connection));
             }
 
+            TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
+            EventHandler<ErrorEventArgs> onError = null;
+            Action<bool> onSent = null;
+
             // If we don't throw here when the WebSocket isn't open, WebSocketHander.SendAsync will noop.
             if (_webSocket.ReadyState != WebSocketState.Open)
             {
                 // Make this a faulted task and trigger the OnError even to maintain consistency with the HttpBasedTransports
-                var ex = new InvalidOperationException("Error_DataCannotBeSentDuringWebSocketReconnect");
+                var ex = new InvalidOperationException("Data can not be sent during WebSocket reconnect.");
                 var result = TaskAsyncHelper.FromError(ex);
 
                 connection.OnError(ex);
                 return result;
             }
 
-            // TODO: Subscribe error
+            onError = (o, e) =>
+            {
+                _webSocket.OnError -= onError;
+                tcs.SetException(e.ToException());
+            };
 
-            _webSocket.Send(data);
+            onSent = (sent) =>
+            {
+                _webSocket.OnError -= onError;
 
-            return Task.Delay(0);
+                if (sent)
+                {
+                    tcs.SetResult(null);
+                }
+
+                // onError handler is invoked, when sent == false
+            };
+
+            _webSocket.OnError += onError;
+            _webSocket.SendAsync(data, onSent);
+
+            return tcs.Task;
         }
 
         // virtual for testing
@@ -601,11 +623,7 @@ namespace NineDigit.BittrexTest
         public override void LostConnection(IConnection connection)
         {
             _connection.Trace(TraceLevels.Events, "WS: LostConnection");
-            
-            if (_webSocketTokenSource != null)
-            {
-                _webSocketTokenSource.Cancel();
-            }
+            _webSocketTokenSource?.Cancel();
         }
 
         protected override void Dispose(bool disposing)
@@ -618,21 +636,12 @@ namespace NineDigit.BittrexTest
                     return;
                 }
 
-                if (_webSocketTokenSource != null)
-                {
-                    // Gracefully close the websocket message loop
-                    _webSocketTokenSource.Cancel();
-                }
+                // Gracefully close the websocket message loop
+                _webSocketTokenSource?.Cancel();
 
-                if (_webSocket != null)
-                {
-                    //_webSocket.Dispose();
-                }
+                //_webSocket?.Dispose();
 
-                if (_webSocketTokenSource != null)
-                {
-                    _webSocketTokenSource.Dispose();
-                }
+                _webSocketTokenSource?.Dispose();
             }
 
             base.Dispose(disposing);
