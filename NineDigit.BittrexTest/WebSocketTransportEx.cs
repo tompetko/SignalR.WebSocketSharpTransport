@@ -16,6 +16,55 @@ using WebSocketSharp;
 
 namespace NineDigit.BittrexTest
 {
+    internal class DefaultHttpClientWrapper : IHttpClient
+    {
+        private readonly IHttpClient _httpClient;
+        private IConnection _connection;
+
+        //public string UserAgent { get; set; }
+
+        public DefaultHttpClientWrapper()
+        {
+            _httpClient = new DefaultHttpClient();
+        }
+
+        public Task<IResponse> Get(string url, Action<IRequest> prepareRequest, bool isLongRunning)
+        {
+            return _httpClient.Get(url, r => PrepareRequest(prepareRequest, r), isLongRunning);
+        }
+
+        public void Initialize(IConnection connection)
+        {
+            this._connection = connection;
+
+            _httpClient.Initialize(connection);
+        }
+
+        public Task<IResponse> Post(string url, Action<IRequest> prepareRequest, IDictionary<string, string> postData, bool isLongRunning)
+        {
+            return _httpClient.Post(url, r => PrepareRequest(prepareRequest, r), isLongRunning);
+        }
+
+        private void PrepareRequest(Action<IRequest> prepareRequest, IRequest request)
+        {
+            /*
+             * Note: Do not call prepareRequest(IRequest) if this.UserAgent property is set.
+             * This method sets request.UserAgent property and calls
+             * request.SetRequestHeaders(IConnection.Headers).
+             * 
+             * https://github.com/SignalR/SignalR/blob/d463e0967edb416362c27b58e0a9515cbae698fe/src/Microsoft.AspNet.SignalR.Client/Connection.cs#L915
+             */
+
+            //if (string.IsNullOrEmpty(UserAgent))
+            //    prepareRequest(request);
+            //else
+            {
+                //request.UserAgent = UserAgent;
+                request.SetRequestHeaders(_connection.Headers);
+            }
+        }
+    }
+
     internal static class ExceptionsExtensions
     {
         internal static Exception Unwrap(this Exception ex)
@@ -176,8 +225,6 @@ namespace NineDigit.BittrexTest
 
     internal class WebSocketSharpRequestWrapperEx : IRequest
     {
-        const string UserAgentHeaderKey = "User-Agent";
-
         private readonly List<KeyValuePair<string, string>> _headers;
         private readonly WebSocket _clientWebSocket;
         private readonly IConnection _connection;
@@ -204,8 +251,10 @@ namespace NineDigit.BittrexTest
 
         public string UserAgent
         {
-            get { return this.GetHeader(UserAgentHeaderKey); }
-            set { this.SetHeader(UserAgentHeaderKey, value); }
+            get { return null; }
+            set
+            {
+            }
         }
 
         public ICredentials Credentials
@@ -267,7 +316,6 @@ namespace NineDigit.BittrexTest
             }
             set
             {
-
             }
         }
 
@@ -280,7 +328,10 @@ namespace NineDigit.BittrexTest
 
             foreach (KeyValuePair<string, string> headerEntry in headers)
             {
-                this.SetHeader(headerEntry.Key, headerEntry.Value);
+                this._headers.Add(
+                    new KeyValuePair<string, string>(headerEntry.Key, headerEntry.Value));
+
+                //this.SetHeader(headerEntry.Key, headerEntry.Value);
             }
         }
 
@@ -341,12 +392,7 @@ namespace NineDigit.BittrexTest
             }
         }
 
-        private string GetHeader(string key)
-        {
-            return this._headers.FirstOrDefault(i => i.Key == key).Value;
-        }
-
-        private void SetHeader(string key, string value)
+        /*private void SetHeader(string key, string value)
         {
             for (int i = _headers.Count - 1; i >= 0; i--)
             {
@@ -357,7 +403,7 @@ namespace NineDigit.BittrexTest
             }
 
             _headers.Add(new KeyValuePair<string, string>(key, value));
-        }
+        }*/
     }
 
     public class WebSocketTransportEx : ClientTransportBase
@@ -379,6 +425,7 @@ namespace NineDigit.BittrexTest
             : base(client, "webSockets")
         {
             ReconnectDelay = TimeSpan.FromSeconds(2);
+            _webSocketTokenSource = new CancellationTokenSource();
         }
 
         /// <summary>
@@ -440,8 +487,9 @@ namespace NineDigit.BittrexTest
             _webSocket.OnClose += _webSocket_OnClose;
             _webSocket.OnError += _webSocket_OnError;
 
-            _connection.PrepareRequest(
-                new WebSocketSharpRequestWrapperEx(_webSocket, _connection));
+            var request = new WebSocketSharpRequestWrapperEx(_webSocket, _connection);
+
+            _connection.PrepareRequest(request);
 
             token.Register(() => tcs.TrySetCanceled());
 

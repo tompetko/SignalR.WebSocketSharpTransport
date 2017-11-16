@@ -4,92 +4,128 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using System.Threading;
 using System.Net;
 using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Http;
 using Microsoft.AspNet.SignalR.Client.Transports;
+using System.Threading;
+using System.Collections.ObjectModel;
 
 namespace NineDigit.BittrexTest
 {
-    internal class BittrexExchange
+    internal static class BittrexConstants
     {
-        public HubConnection Connection { get; private set; }
-        public IHubProxy HubProxy { get; private set; }
+        public const string HubName = "CoreHub";
+        public const string __cfduidCookieName = "__cfduid";
+        public const string cf_clearanceCookieName = "cf_clearance";
+        public const string accessTokenCookieName = ".AspNet.ApplicationCookie";
+        public const string UpdateSummaryStateEventName = "updateSummaryState";
+        public const string UpdateExchangeStateEventName = "updateExchangeState";
+        public const string UpdateOrderStateEventName = "updateOrderState";
+    }
 
-        public BittrexExchange()
+    public class CloudFlareConnectConfiguration
+    {
+        public string DUID { get; set; }
+        public string Clearance { get; set; }
+        public string UserAgent { get; set; }
+    }
+
+    public sealed class BittrexFeedConnectConfiguration
+    {
+        public CloudFlareConnectConfiguration CloudFlare { get; set; }
+        public string AccessToken { get; set; }
+
+        public static BittrexFeedConnectConfiguration Default
         {
-            Connection = new HubConnection("https://socket.bittrex.com");
+            get { return new BittrexFeedConnectConfiguration(); }
+        }
+    }
+
+    public class BittrexExchange
+    {
+        private readonly HubConnection _connection;
+        private readonly IHubProxy _hubProxy;
+        private readonly Uri _feedUri;
+
+        public BittrexExchange(Uri feedUri)
+        {
+            if (feedUri == null)
+                throw new ArgumentNullException(nameof(feedUri));
+
+            _feedUri = feedUri;
+
+            _connection = new HubConnection(feedUri.OriginalString);
+            _connection.CookieContainer = new CookieContainer();
+            _connection.TraceLevel = TraceLevels.Events;
+            _connection.TraceWriter = Console.Out;
+            _connection.Closed += Connection_Closed;
+            _connection.ConnectionSlow += Connection_ConnectionSlow;
+            _connection.Error += Connection_Error;
+            _connection.Received += Connection_Received;
+            _connection.Reconnected += Connection_Reconnected;
+            _connection.Reconnecting += Connection_Reconnecting;
+            _connection.StateChanged += Connection_StateChanged;
+
+            _hubProxy = _connection.CreateHubProxy(BittrexConstants.HubName);
+            _hubProxy.On<dynamic>(BittrexConstants.UpdateSummaryStateEventName, this.OnUpdateSummaryState);
+            _hubProxy.On<dynamic>(BittrexConstants.UpdateExchangeStateEventName, this.OnUpdateExchangeState);
+            _hubProxy.On<dynamic>(BittrexConstants.UpdateOrderStateEventName, this.OnUpdateOrderState);
         }
 
-        public async Task setupWebsockets(string __cfduid, string cf_clearance, string accessToken)
+        public HubConnection Connection
         {
-            Connection.TraceLevel = TraceLevels.Events;
-            Connection.TraceWriter = Console.Out;
+            get { return this._connection; }
+        }
 
-            if (!__cfduid.Equals(string.Empty) || !cf_clearance.Equals(string.Empty))
+        public IHubProxy HubProxy
+        {
+            get { return this._hubProxy; }
+        }
+
+        public async Task Connect(BittrexFeedConnectConfiguration configuration)
+        {
+            DefaultHttpClientWrapper httpClient = new DefaultHttpClientWrapper();
+            AutoTransport autoTransport = null;
+
+            if (configuration != null)
             {
-                Connection.CookieContainer = new CookieContainer();
-                var target = new Uri("https://socket.bittrex.com");
-
-                Cookie __cfduidCookie = new Cookie("__cfduid", __cfduid);
-                Cookie cf_clearanceCookie = new Cookie("cf_clearance", cf_clearance);
-
-                if (!string.IsNullOrEmpty(accessToken))
+                if (configuration.CloudFlare != null)
                 {
-                    var appCookieKey = ".AspNet.ApplicationCookie";
-                    var aspNetApplicationCookie = new Cookie(appCookieKey, accessToken, "/", ".bittrex.com");
+                    var cfduidCookie = new Cookie(BittrexConstants.__cfduidCookieName, configuration.CloudFlare.DUID);
+                    var cfClearanceCookie = new Cookie(BittrexConstants.cf_clearanceCookieName, configuration.CloudFlare.Clearance);
 
-                    Connection.CookieContainer.Add(aspNetApplicationCookie);
-                }
-                
-                Connection.CookieContainer.Add(target, __cfduidCookie);
-                Connection.CookieContainer.Add(target, cf_clearanceCookie);
-
-                Connection.Closed += Connection_Closed;
-                Connection.ConnectionSlow += Connection_ConnectionSlow;
-                Connection.Error += Connection_Error;
-                Connection.Received += Connection_Received;
-                Connection.Reconnected += Connection_Reconnected;
-                Connection.Reconnecting += Connection_Reconnecting;
-                Connection.StateChanged += Connection_StateChanged;
-
-                HubProxy = Connection.CreateHubProxy("CoreHub");
-
-                HubProxy.On<dynamic>("updateSummaryState", this.OnUpdateSummaryState);
-                HubProxy.On<dynamic>("updateExchangeState", this.OnUpdateExchangeState);
-                HubProxy.On<dynamic>("updateOrderState", this.OnUpdateOrderState);
-
-                try
-                {
-                    var httpClient = new DefaultHttpClient();
                     var transports = new IClientTransport[]
                     {
                         new WebSocketTransportEx(httpClient),
                         new LongPollingTransport(httpClient)
                     };
 
-                    var autoTransport = new AutoTransport(
+                    autoTransport = new AutoTransport(
                         httpClient, transports);
 
-                    this.Connection.TransportConnectTimeout = new TimeSpan(0, 0, 15);
+                    //httpClient.UserAgent = configuration.CloudFlare.UserAgent;
 
-                    await Connection.Start(autoTransport);
-                    //await Connection.Start();
+                    _connection.Headers.Add("User-Agent", configuration.CloudFlare.UserAgent);
+
+                    _connection.CookieContainer.Add(_feedUri, cfduidCookie);
+                    _connection.CookieContainer.Add(_feedUri, cfClearanceCookie);
+                    _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
-                catch (HttpRequestException)
+
+                if (!string.IsNullOrEmpty(configuration.AccessToken))
                 {
-                    return;
+                    var aspNetApplicationCookie = new Cookie(BittrexConstants.__cfduidCookieName, configuration.AccessToken, "/", ".bittrex.com");
+                    _connection.CookieContainer.Add(aspNetApplicationCookie);
                 }
             }
-            else
-            {
-                Console.WriteLine("Got no clearance from Cloudaflare", "cloudflare.log");
-            }
 
-            //signal.WaitOne();
+            if (autoTransport == null)
+                autoTransport = new AutoTransport(httpClient);
+            
+            await _connection.Start(autoTransport);
         }
-
+        
         private void OnUpdateOrderState(dynamic obj)
         {
         }
@@ -151,17 +187,14 @@ namespace NineDigit.BittrexTest
 
     internal static class CookieCollectionExtensions
     {
-        const string CFIdCookieName = "__cfduid";
-        const string CFClearanceCookieName = "cf_clearance";
-
-        public static string GetCFIdCookieValue(this CookieCollection self)
+        public static Cookie GetCFIdCookie(this CookieCollection self)
         {
-            return self[CFIdCookieName]?.Value;
+            return self[BittrexConstants.__cfduidCookieName];
         }
 
-        public static string GetCFClearanceCookieValue(this CookieCollection self)
+        public static Cookie GetCFClearanceCookie(this CookieCollection self)
         {
-            return self[CFClearanceCookieName]?.Value;
+            return self[BittrexConstants.cf_clearanceCookieName];
         }
     }
 
@@ -178,26 +211,67 @@ namespace NineDigit.BittrexTest
         }
     }
 
-    internal class ClearanceHandlerEx : ClearanceHandler
+    internal sealed class CloudFlareBypassContext
     {
-        private const string IdCookieName = "__cfduid";
-        private const string ClearanceCookieName = "cf_clearance";
-
-        public string CfDUID { get; private set; }
-        public string CfClearance { get; private set; }
-
-        protected HttpClientHandler ClientHandler => InnerHandler.GetMostInnerHandler() as HttpClientHandler;
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public CloudFlareBypassContext(string userAgent, IList<Cookie> cookies)
         {
-            request.Headers.UserAgent.Clear();
-            request.Headers.UserAgent.ParseAdd("SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)");
-            //request.Headers.UserAgent.ParseAdd("websocket-sharp/1.0");
+            this.UserAgent = userAgent;
+            this.Cookies = new ReadOnlyCollection<Cookie>(cookies);
+        }
 
-            var result = await base.SendAsync(request, cancellationToken);
-            
-            this.CfDUID = this.ClientHandler.CookieContainer.GetCookiesByName(request.RequestUri, IdCookieName).FirstOrDefault()?.Value;
-            this.CfClearance = this.ClientHandler.CookieContainer.GetCookiesByName(request.RequestUri, ClearanceCookieName).FirstOrDefault()?.Value;
+        string UserAgent { get; }
+        IEnumerable<Cookie> Cookies { get; }
+    }
+
+    internal class CloudFlareServerBypassService
+    {
+        readonly Uri _serverUri;
+        readonly CookieContainer _cookieContainer;
+        readonly ClearanceHandler _clearanceHandler;
+        readonly HttpClientHandler _httpClientHandler;
+        readonly HttpClient _httpClient;
+
+        public string UserAgent { get; }
+
+        public CloudFlareServerBypassService(Uri serverUri, string userAgent)
+        {
+            if (serverUri == null)
+                throw new ArgumentNullException(nameof(serverUri));
+
+            if (string.IsNullOrEmpty(userAgent))
+                throw new ArgumentException("Value can not be empty.", nameof(userAgent));
+
+            _serverUri = serverUri;
+            UserAgent = userAgent;
+
+            _cookieContainer = new CookieContainer();
+            _httpClientHandler = new HttpClientHandler()
+            {
+                UseCookies = true,
+                CookieContainer = _cookieContainer
+            };
+
+            _clearanceHandler = new ClearanceHandler(_httpClientHandler);
+            _httpClient = new HttpClient(_clearanceHandler);
+
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        }
+
+        public async Task<CloudFlareBypassContext> GetBypassContextAsync(CancellationToken cancellationToken)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, _serverUri);
+            //request.Headers.UserAgent.ParseAdd(UserAgent);
+
+            var content = await _httpClient.SendAsync(request, cancellationToken);
+            var cookies = _cookieContainer.GetCookies(_serverUri);
+
+            var cfCookies = new List<Cookie>()
+            {
+                cookies.GetCFIdCookie(),
+                cookies.GetCFClearanceCookie()
+            };
+
+            var result = new CloudFlareBypassContext(UserAgent, cfCookies);
 
             return result;
         }
@@ -207,8 +281,7 @@ namespace NineDigit.BittrexTest
     {
         static void Main(string[] args)
         {
-            const string userAgent = "SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)";
-            //const string userAgent = "websocket-sharp/1.0";
+            const string userAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36 OPR/48.0.2685.52";
 
             var bittrexUri = new Uri("https://bittrex.com");
             var bittrexFeedUri = new Uri("https://socket.bittrex.com");
@@ -221,27 +294,33 @@ namespace NineDigit.BittrexTest
             });
 
             var request = new HttpRequestMessage(HttpMethod.Get, bittrexUri);
-
-            request.Headers.UserAgent.Clear();
-            request.Headers.UserAgent.ParseAdd(userAgent);
-
             var client = new HttpClient(handler);
 
-            client.DefaultRequestHeaders.UserAgent.Clear();
+            request.Headers.UserAgent.ParseAdd(userAgent);
             client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
 
             var content = client.SendAsync(request).Result;
-
-            var exchange = new BittrexExchange();
+            var exchange = new BittrexExchange(bittrexFeedUri);
 
             //exchange.GetMarketSummaries(); //Rest API call
 
             var cookies = cookieContainer.GetCookies(bittrexUri);
-            var cfduid = cookies.GetCFIdCookieValue();
-            var cfclearance = cookies.GetCFClearanceCookieValue();
+            var cfduid = cookies.GetCFIdCookie()?.Value;
+            var cfclearance = cookies.GetCFClearanceCookie()?.Value;
 
-            var accessToken = "";
-            
+            var cfConfig = new CloudFlareConnectConfiguration()
+            {
+                DUID = cfduid,
+                Clearance = cfclearance,
+                UserAgent = userAgent
+            };
+
+            var config = new BittrexFeedConnectConfiguration()
+            {
+                AccessToken = "",
+                CloudFlare = cfConfig
+            };
+
             exchange.Connection.StateChanged += (stateChange) =>
             {
                 if (stateChange.NewState == ConnectionState.Connected)
@@ -254,22 +333,9 @@ namespace NineDigit.BittrexTest
                 }
             };
 
-            exchange.setupWebsockets(cfduid, cfclearance, accessToken).Wait();
+            exchange.Connect(config).Wait();
                 
             Console.ReadLine();
         }
     }
-
-    //Notice SignalR version I am using
-    //<package id="Microsoft.AspNet.SignalR.Client" version="2.2.2" targetFramework="net452" />
-
-    //The only reason this implementation fail is that CloudFlare expect same header,
-    // therefore, change as following inside CloudFlareUtilities ClearanceHandler.cs
-    /*private static void EnsureClientHeader(HttpRequestMessage request)
-    {
-        //if (!request.Headers.UserAgent.Any())
-        //    request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Client", "1.0"));
-        if (!request.Headers.UserAgent.Any())
-            request.Headers.UserAgent.ParseAdd("SignalR.Client.NET45/2.2.2.0 (Microsoft Windows NT 6.2.9200.0)");
-    }*/
 }
