@@ -26,8 +26,7 @@ namespace NineDigit.BittrexTest
 
     public class CloudFlareConnectConfiguration
     {
-        public string DUID { get; set; }
-        public string Clearance { get; set; }
+        public IEnumerable<Cookie> Cookies { get; set; }
         public string UserAgent { get; set; }
     }
 
@@ -92,9 +91,6 @@ namespace NineDigit.BittrexTest
             {
                 if (configuration.CloudFlare != null)
                 {
-                    var cfduidCookie = new Cookie(BittrexConstants.__cfduidCookieName, configuration.CloudFlare.DUID);
-                    var cfClearanceCookie = new Cookie(BittrexConstants.cf_clearanceCookieName, configuration.CloudFlare.Clearance);
-
                     var transports = new IClientTransport[]
                     {
                         new WebSocketTransportEx(httpClient),
@@ -104,12 +100,13 @@ namespace NineDigit.BittrexTest
                     autoTransport = new AutoTransport(
                         httpClient, transports);
 
-                    //httpClient.UserAgent = configuration.CloudFlare.UserAgent;
-
                     _connection.Headers.Add("User-Agent", configuration.CloudFlare.UserAgent);
 
-                    _connection.CookieContainer.Add(_feedUri, cfduidCookie);
-                    _connection.CookieContainer.Add(_feedUri, cfClearanceCookie);
+                    foreach (var cookie in configuration.CloudFlare.Cookies)
+                    {
+                        _connection.CookieContainer.Add(_feedUri, new Cookie(cookie.Name, cookie.Value));
+                    }
+                    
                     _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
 
@@ -219,8 +216,8 @@ namespace NineDigit.BittrexTest
             this.Cookies = new ReadOnlyCollection<Cookie>(cookies);
         }
 
-        string UserAgent { get; }
-        IEnumerable<Cookie> Cookies { get; }
+        public string UserAgent { get; }
+        public IEnumerable<Cookie> Cookies { get; }
     }
 
     internal class CloudFlareServerBypassService
@@ -286,32 +283,13 @@ namespace NineDigit.BittrexTest
             var bittrexUri = new Uri("https://bittrex.com");
             var bittrexFeedUri = new Uri("https://socket.bittrex.com");
 
-            var cookieContainer = new CookieContainer();
-            var handler = new ClearanceHandler(new HttpClientHandler()
-            {
-                UseCookies = true,
-                CookieContainer = cookieContainer
-            });
-
-            var request = new HttpRequestMessage(HttpMethod.Get, bittrexUri);
-            var client = new HttpClient(handler);
-
-            request.Headers.UserAgent.ParseAdd(userAgent);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-
-            var content = client.SendAsync(request).Result;
             var exchange = new BittrexExchange(bittrexFeedUri);
-
-            //exchange.GetMarketSummaries(); //Rest API call
-
-            var cookies = cookieContainer.GetCookies(bittrexUri);
-            var cfduid = cookies.GetCFIdCookie()?.Value;
-            var cfclearance = cookies.GetCFClearanceCookie()?.Value;
+            var cfBypassService = new CloudFlareServerBypassService(bittrexUri, userAgent);
+            var cfBypassContext = cfBypassService.GetBypassContextAsync(CancellationToken.None).Result;
 
             var cfConfig = new CloudFlareConnectConfiguration()
             {
-                DUID = cfduid,
-                Clearance = cfclearance,
+                Cookies = cfBypassContext.Cookies,
                 UserAgent = userAgent
             };
 
