@@ -29,14 +29,14 @@ namespace NineDigit.BittrexTest
         public string UserAgent { get; set; }
     }
 
-    public sealed class BittrexFeedConnectConfiguration
+    public sealed class BittrexFeedConnectionConfiguration
     {
         public string AccessToken { get; set; }
         public ConnectionConfiguration Connection { get; set; }
 
-        public static BittrexFeedConnectConfiguration Default
+        public static BittrexFeedConnectionConfiguration Default
         {
-            get { return new BittrexFeedConnectConfiguration(); }
+            get { return new BittrexFeedConnectionConfiguration(); }
         }
     }
 
@@ -81,7 +81,7 @@ namespace NineDigit.BittrexTest
             get { return this._hubProxy; }
         }
 
-        public async Task Connect(BittrexFeedConnectConfiguration configuration)
+        public async Task Connect(BittrexFeedConnectionConfiguration configuration)
         {
             DefaultHttpClientWrapper httpClient = new DefaultHttpClientWrapper();
             AutoTransport autoTransport = null;
@@ -102,11 +102,6 @@ namespace NineDigit.BittrexTest
 
                     if (!string.IsNullOrEmpty(configuration.Connection.UserAgent))
                         _connection.Headers.Add("User-Agent", configuration.Connection.UserAgent);
-
-                    /*foreach (var cookie in configuration.CloudFlare.Cookies)
-                    {
-                        _connection.CookieContainer.Add(_feedUri, new Cookie(cookie.Name, cookie.Value));
-                    }*/
 
                     _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
@@ -240,7 +235,7 @@ namespace NineDigit.BittrexTest
                 UserAgent = userAgent
             };
 
-            var config = new BittrexFeedConnectConfiguration()
+            var config = new BittrexFeedConnectionConfiguration()
             {
                 AccessToken = "",
                 Connection = connConfig
