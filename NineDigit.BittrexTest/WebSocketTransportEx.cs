@@ -401,7 +401,7 @@ namespace NineDigit.BittrexTest
         private int _disposed;
 
         public WebSocketTransportEx()
-            : this(new DefaultHttpClient())
+            : this(new DefaultHttpClientWrapper())
         {
         }
 
