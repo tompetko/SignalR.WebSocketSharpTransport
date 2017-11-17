@@ -8,10 +8,8 @@ using System.Net;
 using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Transports;
 using System.Threading;
-using System.Collections.ObjectModel;
-using NineDigit.SignalR.WebSocketSharpTransport;
 
-namespace NineDigit.BittrexTest
+namespace NineDigit.SignalR.WebSocketSharpTransport.Demo
 {
     internal static class BittrexConstants
     {
@@ -130,14 +128,17 @@ namespace NineDigit.BittrexTest
 
         private void OnUpdateOrderState(dynamic obj)
         {
+            Console.WriteLine("OnUpdateOrderState");
         }
 
         private void OnUpdateExchangeState(dynamic obj)
         {
+            Console.WriteLine("OnUpdateExchangeState");
         }
 
         private void OnUpdateSummaryState(dynamic obj)
         {
+            Console.WriteLine("OnUpdateSummaryState");
         }
 
         #region event handlers

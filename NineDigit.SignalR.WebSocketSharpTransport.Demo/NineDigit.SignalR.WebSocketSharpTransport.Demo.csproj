@@ -7,8 +7,8 @@
     <ProjectGuid>{767F818C-2F12-4231-85CC-C583BC9797AF}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>NineDigit.BittrexTest</RootNamespace>
-    <AssemblyName>NineDigit.BittrexTest</AssemblyName>
+    <RootNamespace>NineDigit.SignalR.WebSocketSharpTransport.Demo</RootNamespace>
+    <AssemblyName>NineDigit.SignalR.WebSocketSharpTransport.Demo</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
