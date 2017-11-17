@@ -9,6 +9,7 @@ using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Transports;
 using System.Threading;
 using System.Collections.ObjectModel;
+using NineDigit.SignalR.WebSocketSharpTransport;
 
 namespace NineDigit.BittrexTest
 {
@@ -26,7 +27,7 @@ namespace NineDigit.BittrexTest
     public sealed class ConnectionConfiguration
     {
         public CookieContainer CookieContainer { get; set; }
-        public string UserAgent { get; set; }
+        public IDictionary<string, string> Headers { get; set; }
     }
 
     public sealed class BittrexFeedConnectionConfiguration
@@ -83,7 +84,7 @@ namespace NineDigit.BittrexTest
 
         public async Task Connect(BittrexFeedConnectionConfiguration configuration)
         {
-            DefaultHttpClientWrapper httpClient = new DefaultHttpClientWrapper();
+            DefaultHttpClientEx httpClient = new DefaultHttpClientEx();
             AutoTransport autoTransport = null;
 
             if (configuration != null)
@@ -92,7 +93,7 @@ namespace NineDigit.BittrexTest
                 {
                     var transports = new IClientTransport[]
                     {
-                        new WebSocketTransportEx(httpClient),
+                        new WebSocketSharpTransport(httpClient),
                         new LongPollingTransport(httpClient)
                     };
 
@@ -100,8 +101,11 @@ namespace NineDigit.BittrexTest
 
                     _connection.CookieContainer = configuration.Connection.CookieContainer;
 
-                    if (!string.IsNullOrEmpty(configuration.Connection.UserAgent))
-                        _connection.Headers.Add("User-Agent", configuration.Connection.UserAgent);
+                    if (configuration.Connection.Headers != null)
+                    {
+                        foreach (var header in configuration.Connection.Headers)
+                            _connection.Headers[header.Key] = header.Value;
+                    }
 
                     _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
@@ -118,7 +122,12 @@ namespace NineDigit.BittrexTest
             
             await _connection.Start(autoTransport);
         }
-        
+
+        public void Disconnect()
+        {
+            Task.Run(() => _connection.Stop());
+        }
+
         private void OnUpdateOrderState(dynamic obj)
         {
         }
@@ -215,6 +224,7 @@ namespace NineDigit.BittrexTest
 
             //
 
+            var feedHeaders = new Dictionary<string, string>();
             var cookieContainer = new CookieContainer();
             var httpClientHandler = new HttpClientHandler()
             {
@@ -232,12 +242,14 @@ namespace NineDigit.BittrexTest
             var connConfig = new ConnectionConfiguration()
             {
                 CookieContainer = cookieContainer,
-                UserAgent = userAgent
+                Headers = feedHeaders
             };
+
+            feedHeaders.Add("User-Agent", userAgent);
 
             var config = new BittrexFeedConnectionConfiguration()
             {
-                AccessToken = "",
+                // NOTE: Not applicable: AccessToken = "",
                 Connection = connConfig
             };
 
@@ -246,14 +258,11 @@ namespace NineDigit.BittrexTest
             //
 
             var request = new HttpRequestMessage(HttpMethod.Get, bittrexUri);
-            //request.Headers.UserAgent.ParseAdd(UserAgent);
-
             var content = httpClient.SendAsync(request, CancellationToken.None).Result;
 
             //
 
             exchange.Connection.CookieContainer = cookieContainer;
-
             exchange.Connection.StateChanged += (stateChange) =>
             {
                 if (stateChange.NewState == ConnectionState.Connected)
@@ -267,7 +276,7 @@ namespace NineDigit.BittrexTest
             };
 
             exchange.Connect(config).Wait();
-                
+
             Console.ReadLine();
         }
     }
