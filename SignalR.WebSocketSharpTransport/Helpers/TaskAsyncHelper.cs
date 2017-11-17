@@ -2,7 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport.Helpers
+namespace SignalR.WebSocketSharpTransport.Helpers
 {
     internal static class TaskAsyncHelper
     {

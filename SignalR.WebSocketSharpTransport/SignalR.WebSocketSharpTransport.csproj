@@ -7,8 +7,8 @@
     <ProjectGuid>{0697CBAE-5C37-43FB-8A75-616581B57577}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>NineDigit.SignalR.WebSocketSharpTransport</RootNamespace>
-    <AssemblyName>NineDigit.SignalR.WebSocketSharpTransport</AssemblyName>
+    <RootNamespace>SignalR.WebSocketSharpTransport</RootNamespace>
+    <AssemblyName>SignalR.WebSocketSharpTransport</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>

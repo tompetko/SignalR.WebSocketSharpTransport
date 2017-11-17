@@ -1,13 +1,13 @@
 ﻿using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Http;
-using NineDigit.SignalR.WebSocketSharpTransport.Extensions;
+using SignalR.WebSocketSharpTransport.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using WebSocketSharp;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport
+namespace SignalR.WebSocketSharpTransport
 {
     internal class WebSocketSharpRequestWrapperEx : IRequest
     {

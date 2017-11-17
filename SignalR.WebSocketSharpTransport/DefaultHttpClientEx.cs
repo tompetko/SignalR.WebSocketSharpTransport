@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport
+namespace SignalR.WebSocketSharpTransport
 {
     public class DefaultHttpClientEx : IHttpClient
     {

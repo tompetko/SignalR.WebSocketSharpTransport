@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport.Extensions
+namespace SignalR.WebSocketSharpTransport.Extensions
 {
     internal static class ExceptionsExtensions
     {

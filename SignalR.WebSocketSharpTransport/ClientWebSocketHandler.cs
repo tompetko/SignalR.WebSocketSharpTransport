@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNet.SignalR.WebSockets;
 using System.Diagnostics;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport
+namespace SignalR.WebSocketSharpTransport
 {
     internal class ClientWebSocketHandler : WebSocketHandler
     {

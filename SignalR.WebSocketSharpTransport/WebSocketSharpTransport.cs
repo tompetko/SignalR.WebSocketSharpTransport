@@ -2,14 +2,14 @@
 using Microsoft.AspNet.SignalR.Client.Http;
 using Microsoft.AspNet.SignalR.Client.Infrastructure;
 using Microsoft.AspNet.SignalR.Client.Transports;
-using NineDigit.SignalR.WebSocketSharpTransport.Extensions;
-using NineDigit.SignalR.WebSocketSharpTransport.Helpers;
+using SignalR.WebSocketSharpTransport.Extensions;
+using SignalR.WebSocketSharpTransport.Helpers;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WebSocketSharp;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport
+namespace SignalR.WebSocketSharpTransport
 {
     public class WebSocketSharpTransport : ClientTransportBase
     {

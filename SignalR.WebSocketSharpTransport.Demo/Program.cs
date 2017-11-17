@@ -9,7 +9,7 @@ using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Transports;
 using System.Threading;
 
-namespace NineDigit.SignalR.WebSocketSharpTransport.Demo
+namespace SignalR.WebSocketSharpTransport.Demo
 {
     internal static class BittrexConstants
     {

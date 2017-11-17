@@ -7,8 +7,8 @@
     <ProjectGuid>{767F818C-2F12-4231-85CC-C583BC9797AF}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>NineDigit.SignalR.WebSocketSharpTransport.Demo</RootNamespace>
-    <AssemblyName>NineDigit.SignalR.WebSocketSharpTransport.Demo</AssemblyName>
+    <RootNamespace>SignalR.WebSocketSharpTransport.Demo</RootNamespace>
+    <AssemblyName>SignalR.WebSocketSharpTransport.Demo</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -70,9 +70,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NineDigit.SignalR.WebSocketSharpTransport\NineDigit.SignalR.WebSocketSharpTransport.csproj">
+    <ProjectReference Include="..\SignalR.WebSocketSharpTransport\SignalR.WebSocketSharpTransport.csproj">
       <Project>{0697cbae-5c37-43fb-8a75-616581b57577}</Project>
-      <Name>NineDigit.SignalR.WebSocketSharpTransport</Name>
+      <Name>SignalR.WebSocketSharpTransport</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

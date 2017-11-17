@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("NineDigit.SignalR.WebSocketSharpTransport")]
+[assembly: AssemblyTitle("SignalR.WebSocketSharpTransport.Demo")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("NineDigit.SignalR.WebSocketSharpTransport")]
+[assembly: AssemblyProduct("SignalR.WebSocketSharpTransport.Demo")]
 [assembly: AssemblyCopyright("Copyright © 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("0697cbae-5c37-43fb-8a75-616581b57577")]
+[assembly: Guid("767f818c-2f12-4231-85cc-c583bc9797af")]
 
 // Version information for an assembly consists of the following four values:
 //
