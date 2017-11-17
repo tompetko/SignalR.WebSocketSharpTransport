@@ -23,16 +23,16 @@ namespace NineDigit.BittrexTest
         public const string UpdateOrderStateEventName = "updateOrderState";
     }
 
-    public class CloudFlareConnectConfiguration
+    public sealed class ConnectionConfiguration
     {
-        public IEnumerable<Cookie> Cookies { get; set; }
+        public CookieContainer CookieContainer { get; set; }
         public string UserAgent { get; set; }
     }
 
     public sealed class BittrexFeedConnectConfiguration
     {
-        public CloudFlareConnectConfiguration CloudFlare { get; set; }
         public string AccessToken { get; set; }
+        public ConnectionConfiguration Connection { get; set; }
 
         public static BittrexFeedConnectConfiguration Default
         {
@@ -88,7 +88,7 @@ namespace NineDigit.BittrexTest
 
             if (configuration != null)
             {
-                if (configuration.CloudFlare != null)
+                if (configuration.Connection != null)
                 {
                     var transports = new IClientTransport[]
                     {
@@ -98,12 +98,16 @@ namespace NineDigit.BittrexTest
 
                     autoTransport = new AutoTransport(httpClient, transports);
 
-                    foreach (var cookie in configuration.CloudFlare.Cookies)
+                    _connection.CookieContainer = configuration.Connection.CookieContainer;
+
+                    if (!string.IsNullOrEmpty(configuration.Connection.UserAgent))
+                        _connection.Headers.Add("User-Agent", configuration.Connection.UserAgent);
+
+                    /*foreach (var cookie in configuration.CloudFlare.Cookies)
                     {
                         _connection.CookieContainer.Add(_feedUri, new Cookie(cookie.Name, cookie.Value));
-                    }
+                    }*/
 
-                    _connection.Headers.Add("User-Agent", configuration.CloudFlare.UserAgent);
                     _connection.TransportConnectTimeout = new TimeSpan(0, 0, 10);
                 }
 
@@ -204,73 +208,7 @@ namespace NineDigit.BittrexTest
             return container.GetCookies(uri).Cast<Cookie>().Where(c => names.Contains(c.Name)).ToList();
         }
     }
-
-    internal sealed class CloudFlareBypassContext
-    {
-        public CloudFlareBypassContext(string userAgent, IList<Cookie> cookies)
-        {
-            this.UserAgent = userAgent;
-            this.Cookies = new ReadOnlyCollection<Cookie>(cookies);
-        }
-
-        public string UserAgent { get; }
-        public IEnumerable<Cookie> Cookies { get; }
-    }
-
-    internal class CloudFlareServerBypassService
-    {
-        readonly Uri _serverUri;
-        readonly CookieContainer _cookieContainer;
-        readonly ClearanceHandler _clearanceHandler;
-        readonly HttpClientHandler _httpClientHandler;
-        readonly HttpClient _httpClient;
-
-        public string UserAgent { get; }
-
-        public CloudFlareServerBypassService(Uri serverUri, string userAgent)
-        {
-            if (serverUri == null)
-                throw new ArgumentNullException(nameof(serverUri));
-
-            if (string.IsNullOrEmpty(userAgent))
-                throw new ArgumentException("Value can not be empty.", nameof(userAgent));
-
-            _serverUri = serverUri;
-            UserAgent = userAgent;
-
-            _cookieContainer = new CookieContainer();
-            _httpClientHandler = new HttpClientHandler()
-            {
-                UseCookies = true,
-                CookieContainer = _cookieContainer
-            };
-
-            _clearanceHandler = new ClearanceHandler(_httpClientHandler);
-            _httpClient = new HttpClient(_clearanceHandler);
-
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-        }
-
-        public async Task<CloudFlareBypassContext> GetBypassContextAsync(CancellationToken cancellationToken)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Get, _serverUri);
-            //request.Headers.UserAgent.ParseAdd(UserAgent);
-
-            var content = await _httpClient.SendAsync(request, cancellationToken);
-            var cookies = _cookieContainer.GetCookies(_serverUri);
-
-            var cfCookies = new List<Cookie>()
-            {
-                cookies.GetCFIdCookie(),
-                cookies.GetCFClearanceCookie()
-            };
-
-            var result = new CloudFlareBypassContext(UserAgent, cfCookies);
-
-            return result;
-        }
-    }
-
+    
     class Program
     {
         static void Main(string[] args)
@@ -280,21 +218,46 @@ namespace NineDigit.BittrexTest
             var bittrexUri = new Uri("https://bittrex.com");
             var bittrexFeedUri = new Uri("https://socket.bittrex.com");
 
-            var exchange = new BittrexExchange(bittrexFeedUri);
-            var cfBypassService = new CloudFlareServerBypassService(bittrexUri, userAgent);
-            var cfBypassContext = cfBypassService.GetBypassContextAsync(CancellationToken.None).Result;
+            //
 
-            var cfConfig = new CloudFlareConnectConfiguration()
+            var cookieContainer = new CookieContainer();
+            var httpClientHandler = new HttpClientHandler()
             {
-                Cookies = cfBypassContext.Cookies,
+                UseCookies = true,
+                CookieContainer = cookieContainer
+            };
+
+            var clearanceHandler = new ClearanceHandler(httpClientHandler);
+            var httpClient = new HttpClient(clearanceHandler);
+
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+
+            //
+
+            var connConfig = new ConnectionConfiguration()
+            {
+                CookieContainer = cookieContainer,
                 UserAgent = userAgent
             };
 
             var config = new BittrexFeedConnectConfiguration()
             {
                 AccessToken = "",
-                CloudFlare = cfConfig
+                Connection = connConfig
             };
+
+            var exchange = new BittrexExchange(bittrexFeedUri);
+
+            //
+
+            var request = new HttpRequestMessage(HttpMethod.Get, bittrexUri);
+            //request.Headers.UserAgent.ParseAdd(UserAgent);
+
+            var content = httpClient.SendAsync(request, CancellationToken.None).Result;
+
+            //
+
+            exchange.Connection.CookieContainer = cookieContainer;
 
             exchange.Connection.StateChanged += (stateChange) =>
             {
