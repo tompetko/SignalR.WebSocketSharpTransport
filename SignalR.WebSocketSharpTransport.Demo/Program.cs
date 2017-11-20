@@ -268,7 +268,13 @@ namespace SignalR.WebSocketSharpTransport.Demo
             {
                 if (stateChange.NewState == ConnectionState.Connected)
                 {
-                    exchange.HubProxy.Invoke("subscribeToExchangeDeltas", "BTC-EXCL").ContinueWith((t) =>
+                    exchange.HubProxy.Invoke("SubscribeToSummaryDeltas").ContinueWith((t) =>
+                    {
+                        //bool isConnected = t.Result;
+                        //HubProxy.Invoke("QueryExchangeState", "BTC-EXCL");//get order book snapshot
+                    });
+
+                    exchange.HubProxy.Invoke("SubscribeToExchangeDeltas", "BTC-EXCL").ContinueWith((t) =>
                     {
                         //bool isConnected = t.Result;
                         //HubProxy.Invoke("QueryExchangeState", "BTC-EXCL");//get order book snapshot
