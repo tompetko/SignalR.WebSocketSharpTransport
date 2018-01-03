@@ -30,7 +30,6 @@ namespace SignalR.WebSocketSharpTransport
             : base(client, "webSockets")
         {
             ReconnectDelay = TimeSpan.FromSeconds(2);
-            _webSocketTokenSource = new CancellationTokenSource();
         }
 
         /// <summary>
@@ -99,6 +98,7 @@ namespace SignalR.WebSocketSharpTransport
             var token = linkedCts.Token;
 
             token.Register(() => tcs.TrySetCanceled());
+            token.Register(() => _webSocket.Close());
 
             onError = (o, e) =>
             {
@@ -248,7 +248,9 @@ namespace SignalR.WebSocketSharpTransport
             {
                 try
                 {
+                    await Task.Delay(ReconnectDelay);
                     await PerformConnect(reconnectUrl);
+
                     break;
                 }
                 catch (OperationCanceledException)
@@ -264,8 +266,6 @@ namespace SignalR.WebSocketSharpTransport
 
                     _connection.OnError(ex);
                 }
-
-                await Task.Delay(ReconnectDelay);
             }
         }
 
