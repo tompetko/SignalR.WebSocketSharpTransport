@@ -74,4 +74,8 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <!-- https://docs.nuget.org/create/creating-and-publishing-a-package -->
+  <Target Name="AfterBuild" Condition=" '$(Configuration)' == 'Release'">
+    <Exec Command="nuget pack -Symbols $(ProjectPath) -OutputDirectory $(OutDir) -IncludeReferencedProjects -Properties Configuration=$(Configuration)" />
+  </Target>
 </Project>
