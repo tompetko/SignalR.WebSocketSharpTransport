@@ -8,6 +8,7 @@ using System.Net;
 using Microsoft.AspNet.SignalR.Client;
 using Microsoft.AspNet.SignalR.Client.Transports;
 using System.Threading;
+using Microsoft.AspNet.SignalR.Client.Http;
 
 namespace SignalR.WebSocketSharpTransport.Demo
 {
@@ -82,7 +83,7 @@ namespace SignalR.WebSocketSharpTransport.Demo
 
         public async Task Connect(BittrexFeedConnectionConfiguration configuration)
         {
-            DefaultHttpClientEx httpClient = new DefaultHttpClientEx();
+            DefaultHttpClient httpClient = new DefaultHttpClient();
             AutoTransport autoTransport = null;
 
             if (configuration != null)
