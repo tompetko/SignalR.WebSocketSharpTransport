@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace SignalR.WebSocketSharpTransport
 {
+    [Obsolete("No need to use DefaultHttpClientEx. Use DefaultHttpClient instead.")]
     public class DefaultHttpClientEx : IHttpClient
     {
         private readonly IHttpClient _httpClient;
